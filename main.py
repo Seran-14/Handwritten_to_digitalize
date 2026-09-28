@@ -41,15 +41,77 @@ MIME_MAP = {
     ".doc": "application/msword",
 }
 
+import re
+
 PROMPT = (
     "You are an expert document OCR and handwriting transcription engine.\n"
-    "Transcribe all handwritten and printed text in this document/image verbatim with high precision.\n"
+    "Transcribe all handwritten and printed text, diagrams, bullet points, and flow structures verbatim with high precision.\n"
     "Rules:\n"
-    "- Maintain original line breaks, formatting, headings, and tabular layout structure where logical.\n"
-    "- If some handwriting is degraded or unclear, make your best high-confidence interpretation.\n"
-    "- Do NOT add conversational greetings, explanations, markdown commentary, or code wrapping.\n"
-    "- Return ONLY the verbatim transcribed text."
+    "- Transcribe all arrows, bullets, and symbols as real clean Unicode characters (such as →, ⇒, ↓, ↑, ←, ↔, •, ✓, ✗) directly.\n"
+    "- NEVER use LaTeX math tags or formatting commands (e.g. do NOT output $\\downarrow$, $\\rightarrow$, $\\Rightarrow$, $\\underline{...}$, or $\\text{...}$).\n"
+    "- Maintain original line breaks, paragraph structure, headings, and indentation accurately.\n"
+    "- If handwriting is degraded or ambiguous, make your best high-confidence interpretation.\n"
+    "- Do NOT add conversational greetings, explanations, markdown commentary, or code blocks.\n"
+    "- Return ONLY the verbatim transcribed clean text."
 )
+
+
+def clean_latex_symbols(text: str) -> str:
+    """
+    Cleans LaTeX OCR artifacts and converts them to clean Unicode symbols and plain text.
+    Handles down arrows, right arrows, implications, underlines, math blocks, and markers.
+    """
+    if not text:
+        return ""
+
+    # Common LaTeX symbol conversions to clean Unicode
+    replacements = [
+        (r"\\(Right|right)arrow", "→"),
+        (r"\\(Left|left)arrow", "←"),
+        (r"\\(Down|down)arrow", "↓"),
+        (r"\\(Up|up)arrow", "↑"),
+        (r"\\Rightarrow", "⇒"),
+        (r"\\Leftarrow", "⇐"),
+        (r"\\Downarrow", "⇓"),
+        (r"\\Uparrow", "⇑"),
+        (r"\\leftrightarrow", "↔"),
+        (r"\\Leftrightarrow", "⇔"),
+        (r"\\to\b", "→"),
+        (r"\\implies\b", "⇒"),
+        (r"\\bullet", "•"),
+        (r"\\times", "×"),
+        (r"\\div", "÷"),
+        (r"\\pm", "±"),
+        (r"\\approx", "≈"),
+        (r"\\neq", "≠"),
+        (r"\\leq", "≤"),
+        (r"\\geq", "≥"),
+        (r"\\dots", "..."),
+        (r"\\cdots", "..."),
+    ]
+
+    for pattern, repl in replacements:
+        text = re.sub(pattern, repl, text)
+
+    # Unwrap nested \underline{\text{...}} or \underline{...}
+    text = re.sub(r"\\underline\{\\text\{([^}]+)\}\}", r"\1", text)
+    text = re.sub(r"\\underline\{([^}]+)\}", r"\1", text)
+
+    # Unwrap nested \textbf{\text{...}} or \textbf{...}
+    text = re.sub(r"\\textbf\{\\text\{([^}]+)\}\}", r"\1", text)
+    text = re.sub(r"\\textbf\{([^}]+)\}", r"\1", text)
+
+    # Unwrap \text{...} or \mathrm{...}
+    text = re.sub(r"\\(text|mathrm|mathbf|textit|mathit)\{([^}]+)\}", r"\2", text)
+
+    # Remove inline math dollar signs surrounding terms or clean arrows
+    text = re.sub(r"\$([^\$\n]+)\$", r"\1", text)
+
+    # Clean any leftover standalone dollar signs
+    text = text.replace("$", "")
+
+    return text
+
 
 SUPPORTED_MODELS = [
     {
@@ -290,14 +352,14 @@ def process_single_file(
         try:
             extracted = process_with_groq(content_bytes, mime_type, model_choice)
             if extracted:
-                return extracted, model_choice
+                return clean_latex_symbols(extracted), model_choice
         except Exception as e:
             log(f"[PIPELINE] ⚠️ Groq pipeline error ({e}). Falling back to Gemini 2.0 Flash...")
             extracted = process_with_gemini(content_bytes, mime_type, "gemini-2.0-flash")
-            return extracted, f"{model_choice} (Fallback: gemini-2.0-flash)"
+            return clean_latex_symbols(extracted), f"{model_choice} (Fallback: gemini-2.0-flash)"
     
     extracted = process_with_gemini(content_bytes, mime_type, model_choice)
-    return extracted, model_choice
+    return clean_latex_symbols(extracted), model_choice
 
 
 class ExportRequest(BaseModel):
@@ -342,76 +404,162 @@ def build_docx_buffer(text: str) -> io.BytesIO:
     return buf
 
 
+def sanitize_text_for_pdf(text: str) -> str:
+    """
+    Cleans and prepares text for professional PDF generation.
+    Converts LaTeX artifacts, arrows, and formatting into clean, reliable typography.
+    """
+    if not text:
+        return ""
+    
+    text = clean_latex_symbols(text)
+    
+    # Universal symbol mapping for crystal-clear PDF rendering without glyph corruption
+    replacements = [
+        ("⇒", "=>"),
+        ("→", "->"),
+        ("←", "<-"),
+        ("⇐", "<="),
+        ("↓", "v"),
+        ("↑", "^"),
+        ("↔", "<->"),
+        ("⇓", "v"),
+        ("⇑", "^"),
+        ("•", "• "),
+        ("✓", "[OK]"),
+        ("✗", "[X]"),
+        ("≈", "~="),
+        ("≠", "!="),
+        ("≤", "<="),
+        ("≥", ">="),
+        ("±", "+/-"),
+        ("×", "x"),
+        ("÷", "/"),
+    ]
+    for src, dest in replacements:
+        text = text.replace(src, dest)
+    
+    return text
+
+
 def build_pdf_buffer(text: str) -> io.BytesIO:
+    # 1. Direct DOCX-to-PDF Converter (Generates 100% exact match to Word DOCX output)
+    try:
+        import tempfile
+        from docx2pdf import convert
+        try:
+            import pythoncom
+            pythoncom.CoInitialize()
+        except Exception:
+            pass
+
+        docx_buf = build_docx_buffer(text)
+        with tempfile.NamedTemporaryFile(suffix=".docx", delete=False) as tmp_docx:
+            tmp_docx_path = tmp_docx.name
+            tmp_docx.write(docx_buf.getvalue())
+
+        tmp_pdf_path = tmp_docx_path.replace(".docx", ".pdf")
+        convert(tmp_docx_path, tmp_pdf_path)
+
+        if os.path.exists(tmp_pdf_path):
+            with open(tmp_pdf_path, "rb") as f:
+                pdf_data = f.read()
+            try:
+                os.remove(tmp_docx_path)
+                os.remove(tmp_pdf_path)
+            except Exception:
+                pass
+            log("[PDF] ✅ Successfully converted DOCX directly to PDF for 100% Word fidelity.")
+            return io.BytesIO(pdf_data)
+    except Exception as e:
+        log(f"[PDF] ℹ️ Direct Word conversion unavailable ({e}). Using ReportLab PDF engine...")
+
+    # 2. ReportLab Platypus Engine (Cross-platform Linux/Render & Windows)
+    clean_text = sanitize_text_for_pdf(text)
+    buf = io.BytesIO()
+
     try:
         from reportlab.lib.pagesizes import letter
-        from reportlab.pdfgen import canvas
+        from reportlab.lib.units import inch
         from reportlab.lib.colors import HexColor
+        from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, HRFlowable
+        from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+        from reportlab.lib.enums import TA_LEFT
 
-        buf = io.BytesIO()
-        c = canvas.Canvas(buf, pagesize=letter)
-        width, height = letter
+        doc = SimpleDocTemplate(
+            buf,
+            pagesize=letter,
+            leftMargin=0.75 * inch,
+            rightMargin=0.75 * inch,
+            topMargin=0.75 * inch,
+            bottomMargin=0.75 * inch,
+        )
 
-        margin = 54
-        line_height = 14
-        y = height - margin
+        styles = getSampleStyleSheet()
 
-        c.setFont("Helvetica-Bold", 16)
-        c.setFillColor(HexColor("#1e293b"))
-        c.drawString(margin, y, "Digitized Document Output")
-        y -= 25
+        title_style = ParagraphStyle(
+            'DocTitle',
+            parent=styles['Heading1'],
+            fontName='Helvetica-Bold',
+            fontSize=16,
+            leading=20,
+            textColor=HexColor("#1e293b"),
+            spaceAfter=8,
+            alignment=TA_LEFT,
+        )
 
-        c.setStrokeColor(HexColor("#cbd5e1"))
-        c.setLineWidth(1)
-        c.line(margin, y, width - margin, y)
-        y -= 20
+        body_style = ParagraphStyle(
+            'DocBody',
+            parent=styles['Normal'],
+            fontName='Helvetica',
+            fontSize=10.5,
+            leading=15,
+            textColor=HexColor("#0f172a"),
+            spaceAfter=4,
+            alignment=TA_LEFT,
+        )
 
-        c.setFont("Helvetica", 10)
-        c.setFillColor(HexColor("#0f172a"))
+        bullet_style = ParagraphStyle(
+            'DocBullet',
+            parent=body_style,
+            leftIndent=15,
+            spaceAfter=4,
+        )
 
-        for raw_line in text.split("\n"):
+        story = []
+        # Document Title
+        story.append(Paragraph("Digitized Document Output", title_style))
+        story.append(HRFlowable(width="100%", thickness=1, color=HexColor("#cbd5e1"), spaceBefore=4, spaceAfter=14))
+
+        for raw_line in clean_text.split("\n"):
             line = raw_line.rstrip()
-            if not line:
-                y -= line_height
-                if y < margin:
-                    c.showPage()
-                    c.setFont("Helvetica", 10)
-                    c.setFillColor(HexColor("#0f172a"))
-                    y = height - margin
+            if not line.strip():
+                story.append(Spacer(1, 8))
                 continue
 
-            words = line.split(" ")
-            curr_line = ""
-            for w in words:
-                test_line = f"{curr_line} {w}".strip()
-                if c.stringWidth(test_line, "Helvetica", 10) < (width - 2 * margin):
-                    curr_line = test_line
-                else:
-                    c.drawString(margin, y, curr_line)
-                    y -= line_height
-                    if y < margin:
-                        c.showPage()
-                        c.setFont("Helvetica", 10)
-                        c.setFillColor(HexColor("#0f172a"))
-                        y = height - margin
-                    curr_line = w
-            if curr_line:
-                c.drawString(margin, y, curr_line)
-                y -= line_height
-                if y < margin:
-                    c.showPage()
-                    c.setFont("Helvetica", 10)
-                    c.setFillColor(HexColor("#0f172a"))
-                    y = height - margin
+            # Escape HTML characters for ReportLab Paragraph
+            safe_line = line.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 
-        c.save()
+            # Format bullet points nicely
+            trimmed = safe_line.strip()
+            if trimmed.startswith("- ") or trimmed.startswith("• "):
+                story.append(Paragraph(f"&bull;&nbsp; {trimmed[2:].strip()}", bullet_style))
+            elif trimmed.startswith("* "):
+                story.append(Paragraph(f"&bull;&nbsp; {trimmed[2:].strip()}", bullet_style))
+            elif line.startswith("   ") or line.startswith("\t"):
+                story.append(Paragraph(f"&nbsp;&nbsp;&nbsp;&nbsp;{safe_line.strip()}", bullet_style))
+            else:
+                story.append(Paragraph(safe_line, body_style))
+
+        doc.build(story)
         buf.seek(0)
         return buf
-    except ImportError:
-        # Minimalist valid PDF generator without external dependencies
+
+    except Exception as e:
+        log(f"[PDF] ⚠️ Platypus PDF build error ({e}). Using standard stream fallback...")
         buf = io.BytesIO()
         escaped_lines = []
-        for line in text.split("\n"):
+        for line in clean_text.split("\n"):
             safe_line = line.replace("\\", "\\\\").replace("(", "\\(").replace(")", "\\)")
             escaped_lines.append(f"({safe_line}) Tj T*")
         stream_content = "BT\n/F1 12 Tf\n50 750 Td\n15 TL\n" + "\n".join(escaped_lines) + "\nET"

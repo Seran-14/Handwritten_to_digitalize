@@ -11,7 +11,6 @@ document.addEventListener('DOMContentLoaded', () => {
   const outputActions = document.getElementById('outputActions');
   const copyBtn = document.getElementById('copyBtn');
   const downloadDocxBtn = document.getElementById('downloadDocxBtn');
-  const downloadPdfBtn = document.getElementById('downloadPdfBtn');
   const errorAlert = document.getElementById('errorAlert');
   const successAlert = document.getElementById('successAlert');
   const usedModelTag = document.getElementById('usedModelTag');
@@ -185,88 +184,6 @@ document.addEventListener('DOMContentLoaded', () => {
       showSuccess('Downloaded Word document (.docx)!');
     } catch (e) {
       showError(e.message);
-    }
-  });
-
-  // Export as PDF (Client-side jsPDF with automatic pagination and word wrapping)
-  downloadPdfBtn.addEventListener('click', async () => {
-    if (!currentExtractedText) return;
-    try {
-      if (window.jspdf && window.jspdf.jsPDF) {
-        const { jsPDF } = window.jspdf;
-        const doc = new jsPDF({
-          orientation: 'portrait',
-          unit: 'pt',
-          format: 'letter'
-        });
-
-        const pageWidth = doc.internal.pageSize.getWidth();
-        const pageHeight = doc.internal.pageSize.getHeight();
-        const margin = 40;
-        const maxLineWidth = pageWidth - (margin * 2);
-        let y = margin + 20;
-
-        // Header
-        doc.setFont('Helvetica', 'bold');
-        doc.setFontSize(16);
-        doc.setTextColor(30, 41, 59);
-        doc.text('Digitized Document Output', margin, y);
-        y += 10;
-
-        doc.setDrawColor(203, 213, 225);
-        doc.setLineWidth(1);
-        doc.line(margin, y, pageWidth - margin, y);
-        y += 20;
-
-        // Content
-        doc.setFont('Helvetica', 'normal');
-        doc.setFontSize(10);
-        doc.setTextColor(15, 23, 42);
-
-        const lines = currentExtractedText.split('\n');
-        lines.forEach(rawLine => {
-          if (!rawLine.trim()) {
-            y += 12;
-            if (y > pageHeight - margin) {
-              doc.addPage();
-              y = margin + 20;
-            }
-            return;
-          }
-
-          const splitLines = doc.splitTextToSize(rawLine, maxLineWidth);
-          splitLines.forEach(l => {
-            if (y > pageHeight - margin) {
-              doc.addPage();
-              y = margin + 20;
-            }
-            doc.text(l, margin, y);
-            y += 14;
-          });
-        });
-
-        doc.save('digitized_document.pdf');
-        showSuccess('Downloaded PDF document (.pdf)!');
-      } else {
-        // Fallback to server export
-        const res = await fetch('/export/pdf', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ text: currentExtractedText, filename: 'digitized_document' })
-        });
-        if (!res.ok) throw new Error('Failed to generate PDF document.');
-        const blob = await res.blob();
-        const url = window.URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = 'digitized_document.pdf';
-        document.body.appendChild(a);
-        a.click();
-        a.remove();
-        showSuccess('Downloaded PDF document (.pdf)!');
-      }
-    } catch (e) {
-      showError('PDF generation error: ' + e.message);
     }
   });
 });

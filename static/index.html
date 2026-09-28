@@ -7,14 +7,13 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-  <link rel="stylesheet" href="/static/style.css" />
+  <link rel="stylesheet" href="/static/style.css?v=6.0" />
 </head>
 <body>
   <header>
-    <div class="badge">AI Vision OCR • PDF &amp; Word Export</div>
+    <div class="badge">AI Vision OCR • Word (.DOCX) Export</div>
     <h1>Document &amp; Handwritten Text Digitizer</h1>
-    <p class="subtitle">Transcribe handwritten text, printed docs, and images directly into editable PDF or Word documents.</p>
+    <p class="subtitle">Transcribe handwritten text, printed docs, and images directly into formatted Word documents.</p>
   </header>
 
   <main>
@@ -67,15 +66,11 @@
           <span class="model-tag" id="usedModelTag"></span>
         </div>
 
-        <!-- Export Buttons (PDF, Word DOCX, Copy) -->
+        <!-- Export Buttons (Word DOCX, Copy) -->
         <div class="btn-actions" id="outputActions" style="display: none;">
           <button class="btn-action btn-action-docx" id="downloadDocxBtn" title="Download Word Document">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><polyline points="9 15 12 18 15 15"/></svg>
             .DOCX
-          </button>
-          <button class="btn-action btn-action-pdf" id="downloadPdfBtn" title="Download PDF Document">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><polyline points="9 15 12 18 15 15"/></svg>
-            .PDF
           </button>
           <button class="btn-action" id="copyBtn" title="Copy Raw Text">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
@@ -99,6 +94,6 @@
     Interactive API Docs: <a href="/docs" target="_blank">/docs</a> &bull; Powered by Gemini &amp; Qwen Vision AI
   </footer>
 
-  <script src="/static/app.js"></script>
+  <script src="/static/app.js?v=6.0"></script>
 </body>
 </html>

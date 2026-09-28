@@ -27,8 +27,7 @@ Digitalise AI/
   2. **⚡ Qwen2.5-VL-7B** — Lightweight, high-speed vision via Groq.
   3. **🚀 qwen/qwen3.8-27b** — Strong language & vision reasoning via Groq.
 - **Export Formats**:
-  - 📄 **Word Document (`.docx`)**: Download formatted Word documents directly.
-  - 📑 **PDF Document (`.pdf`)**: Download formatted, wrapped PDF pages.
+  - 📄 **Word Document (`.docx`)**: Download formatted Microsoft Word documents directly with full Unicode symbols and layout fidelity.
   - 📋 **Copy to Clipboard**: Quick copy raw digitized text.
 
 ---
