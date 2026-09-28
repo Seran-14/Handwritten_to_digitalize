@@ -54,3 +54,6 @@ uvicorn main:app --reload --host 127.0.0.1 --port 8000
 ```powershell
 python test_system.py
 ```
+
+### 4. Deployment link 
+ click here :  https://handwritten-to-digitalize.onrender.com
